@@ -1,6 +1,4 @@
-import { Injectable } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { User } from './entities/user.entity';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,40 +10,19 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  create(createUserDto: CreateUserDto) {
-    return this.userRepository.save(createUserDto);
-    // return `This action adds a new user`;
-  }
-
-  findOneByEmail(email: string) {
-    return this.userRepository.findOneBy({ email });
-    // return `This action returns a user with email ${email}`;
-  }
-
-  findByEmailWithPassword(email: string) {
-    return this.userRepository.findOne({
-      where: { email },
-      select: ['id', 'name', 'email', 'password', 'role'],
+  async remove(id: number) {
+    // 1. Verificar que el usuario exista y no esté ya eliminado
+    const user = await this.userRepository.findOne({
+      where: { id },
     });
-  }
 
-  findAll() {
-    return this.userRepository.find();
-    // return `This action returns all users`;
-  }
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
 
-  findOne(id: number) {
-    return this.userRepository.findOneBy({ id });
-    // return `This action returns a #${id} user`;
-  }
+    // 2. Eliminar lógicamente
+    await this.userRepository.softDelete(id);
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return this.userRepository.update(id, updateUserDto);
-    // return `This action updates a #${id} user`;
-  }
-
-  remove(id: number) {
-    return this.userRepository.softDelete(id);
-    // return `This action removes a #${id} user`;
+    return { message: `User with ID ${id} was deleted successfully` };
   }
 }
