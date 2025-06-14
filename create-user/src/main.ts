@@ -19,11 +19,13 @@ async function bootstrap() {
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.KAFKA,
     options: {
-      client: { brokers: ['localhost:9092'], clientId: 'create-user-service' },
-      consumer: { groupId: 'create-user-group' },
+      client: { clientId: 'create-user', brokers: ['localhost:9092'] },
+      consumer: { groupId: 'create-user-group-server' },
     },
   });
+
   await app.startAllMicroservices();
+
   await app.listen(process.env.PORT || 3001);
 }
 bootstrap();

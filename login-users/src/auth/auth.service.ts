@@ -7,6 +7,7 @@ import {
 import { ClientKafka } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import * as bcryptjs from 'bcryptjs';
+
 import { RegisterDto } from './dto/register.dto';
 import { KafkaServices } from '../kafka/kafka-constants';
 import { KafkaTopics } from '../kafka/kafka-topics.enum';
@@ -24,20 +25,25 @@ export class AuthService implements OnModuleInit {
   }
 
   async register(dto: RegisterDto) {
-    const hashed = await bcryptjs.hash(dto.password.trim(), 10);
+    const password = await bcryptjs.hash(dto.password.trim(), 10);
 
-    const created = await firstValueFrom(
-      this.kafkaClient.send(KafkaTopics.CREATE_USER, {
-        name: dto.name.trim(),
-        email: dto.email.trim(),
-        password: hashed,
-      }),
-    );
+    const reply: { data?: { name: string; email: string }; error?: string } =
+      await firstValueFrom(
+        this.kafkaClient.send(KafkaTopics.CREATE_USER, {
+          name: dto.name.trim(),
+          email: dto.email.trim(),
+          password,
+        }),
+      );
 
-    if (!created) {
-      throw new BadRequestException('No se pudo crear el usuario');
+    // Si no vino data, propaga el error (o genérico)
+    if (!reply.data) {
+      throw new BadRequestException(
+        reply.error ?? 'No se pudo crear el usuario',
+      );
     }
 
-    return { name: created.name, email: created.email };
+    // Devolvemos los datos seguros
+    return reply.data;
   }
 }

@@ -15,9 +15,9 @@ export class UsersKafkaController {
     try {
       // Llama a tu método existente de creación
       const result = await this.usersService.create(dto);
-      return result;
-    } catch {
-      return null;
+      return { data: result };
+    } catch (err) {
+      return { error: err.message };
     }
   }
 }
