@@ -21,53 +21,62 @@ export class AuthService implements OnModuleInit {
     private readonly kafkaClient: ClientKafka,
   ) {}
 
+  private readonly RPC_TIMEOUT = 5000;
+
   async onModuleInit() {
     this.kafkaClient.subscribeToResponseOf(KafkaTopics.CREATE_USER);
     await this.kafkaClient.connect();
   }
 
   async register(dto: RegisterDto) {
-    // 1) Hash de la contraseña
     const password = await bcryptjs.hash(dto.password.trim(), 10);
 
-    // 2) Envío con timeout de 5s
-    let reply: { data?: { name: string; email: string }; error?: string };
+    const payload = {
+      name: dto.name.trim(),
+      email: dto.email.trim(),
+      password,
+    };
+
+    const created = await this.callRpc<{ name: string; email: string }>(
+      KafkaTopics.CREATE_USER,
+      payload,
+    );
+
+    return created; // { name, email }
+  }
+
+  private async callRpc<T>(topic: KafkaTopics, payload: any): Promise<T> {
+    let reply: { data?: T; error?: string };
+
+    // 1) Solo la llamada y el timeout dentro del try
     try {
       reply = await firstValueFrom(
         this.kafkaClient
-          .send(KafkaTopics.CREATE_USER, {
-            name: dto.name.trim(),
-            email: dto.email.trim(),
-            password,
-          })
-          .pipe(timeout(5000)),
+          .send<{ data?: T; error?: string }>(topic, payload)
+          .pipe(timeout(this.RPC_TIMEOUT)),
       );
     } catch (err) {
       if (err instanceof TimeoutError) {
-        // fallo por timeout
         throw new ServiceUnavailableException(
           'El servicio de usuarios no respondió a tiempo',
         );
       }
-      // cualquier otro error (por ejemplo de conexión)
       throw new ServiceUnavailableException(
         'No se pudo conectar con el servicio de usuarios',
       );
     }
 
-    // 3) Si el servicio devolvió un error de negocio
+    // 2) Validaciones de negocio FUERA del try, para que no las atrape
     if (reply.error) {
+      // aquí cae tu BadRequestException para email duplicado
       throw new BadRequestException(reply.error);
     }
-
-    // 4) Si no viene data, también es un fallo
     if (!reply.data) {
       throw new BadRequestException(
         'Respuesta inválida del servicio de usuarios',
       );
     }
 
-    // 5) Todo OK: devolvemos el resultado
     return reply.data;
   }
 }

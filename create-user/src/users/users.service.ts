@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   OnModuleInit,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { User } from './entities/user.entity';
@@ -12,7 +13,7 @@ import * as bcryptjs from 'bcryptjs';
 import { KafkaServices } from 'src/kafka/kafka-constants';
 import { ClientKafka } from '@nestjs/microservices';
 import { KafkaTopics } from 'src/kafka/kafka-topics.enum';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout, TimeoutError } from 'rxjs';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
@@ -30,9 +31,21 @@ export class UsersService implements OnModuleInit {
   }
 
   async create({ name, email, password }: CreateUserDto) {
-    const existingUser = await firstValueFrom(
-      this.kafkaClient.send(KafkaTopics.GET_USER_BY_EMAIL, email),
-    );
+    let existingUser;
+    try {
+      existingUser = await firstValueFrom(
+        this.kafkaClient
+          .send(KafkaTopics.GET_USER_BY_EMAIL, email)
+          .pipe(timeout(5000)), // ⏱ timeout de 5000 ms
+      );
+    } catch (err) {
+      if (err instanceof TimeoutError) {
+        throw new ServiceUnavailableException(
+          'El servicio de búsqueda de usuarios no respondió a tiempo',
+        );
+      }
+      return null;
+    }
 
     if (existingUser) {
       throw new BadRequestException('Este correo ya está registrado.');

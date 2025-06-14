@@ -4,11 +4,12 @@ import {
   NotFoundException,
   OnModuleInit,
   Inject,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ClientKafka } from '@nestjs/microservices';
 import { Repository } from 'typeorm';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout, TimeoutError } from 'rxjs';
 
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
@@ -33,15 +34,23 @@ export class UsersService implements OnModuleInit {
   }
 
   async update(id: number, dto: UpdateUserDto): Promise<{ message: string }> {
-    if (!dto || Object.keys(dto).length === 0) {
-      throw new ConflictException(
-        'Debe enviar al menos un campo para actualizar',
+    let existingUser: { id: number; email: string };
+    try {
+      existingUser = await firstValueFrom(
+        this.kafkaClient
+          .send<{ id: number; email: string }>(KafkaTopics.GET_USER_BY_ID, id)
+          .pipe(timeout(5000)),
+      );
+    } catch (err) {
+      if (err instanceof TimeoutError) {
+        throw new ServiceUnavailableException(
+          'El servicio de búsqueda de usuarios no respondió a tiempo',
+        );
+      }
+      throw new ServiceUnavailableException(
+        'No se pudo conectar con el servicio de búsqueda de usuarios',
       );
     }
-
-    const existingUser = await firstValueFrom(
-      this.kafkaClient.send(KafkaTopics.GET_USER_BY_ID, id),
-    );
 
     if (!existingUser) {
       throw new NotFoundException(`User with ID ${id} not found`);
