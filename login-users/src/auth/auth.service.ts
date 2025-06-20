@@ -1,82 +1,65 @@
 import {
-  BadRequestException,
-  Injectable,
-  OnModuleInit,
   Inject,
-  ServiceUnavailableException,
+  Injectable,
+  UnauthorizedException,
+  OnModuleInit,
 } from '@nestjs/common';
+import * as bcryptjs from 'bcryptjs';
+import { LoginDto } from './dto/login.dto';
+import { JwtService } from '@nestjs/jwt';
+import { KafkaServices } from './kafka/kafka-constants';
 import { ClientKafka } from '@nestjs/microservices';
+import { KafkaTopics } from './kafka/kafka-topics.enum';
 import { firstValueFrom, TimeoutError } from 'rxjs';
 import { timeout } from 'rxjs/operators';
-import * as bcryptjs from 'bcryptjs';
-
-import { RegisterDto } from './dto/register.dto';
-import { KafkaServices } from '../kafka/kafka-constants';
-import { KafkaTopics } from '../kafka/kafka-topics.enum';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
   constructor(
-    @Inject(KafkaServices.USER_CREATE_SERVICE)
+    @Inject(KafkaServices.USER_LOGIN_SERVICE)
     private readonly kafkaClient: ClientKafka,
+    private readonly jwtService: JwtService,
   ) {}
 
   private readonly RPC_TIMEOUT = 5000;
 
   async onModuleInit() {
-    this.kafkaClient.subscribeToResponseOf(KafkaTopics.CREATE_USER);
+    this.kafkaClient.subscribeToResponseOf(KafkaTopics.LOGIN_USER);
     await this.kafkaClient.connect();
   }
 
-  async register(dto: RegisterDto) {
-    const password = await bcryptjs.hash(dto.password.trim(), 10);
-
-    const payload = {
-      name: dto.name.trim(),
-      email: dto.email.trim(),
-      password,
-    };
-
-    const created = await this.callRpc<{ name: string; email: string }>(
-      KafkaTopics.CREATE_USER,
-      payload,
-    );
-
-    return created; // { name, email }
-  }
-
-  private async callRpc<T>(topic: KafkaTopics, payload: any): Promise<T> {
-    let reply: { data?: T; error?: string };
-
-    // 1) Solo la llamada y el timeout dentro del try
+  async login({ email, password }: LoginDto) {
+    let user;
     try {
-      reply = await firstValueFrom(
+      user = await firstValueFrom(
         this.kafkaClient
-          .send<{ data?: T; error?: string }>(topic, payload)
+          .send(KafkaTopics.LOGIN_USER, { email })
           .pipe(timeout(this.RPC_TIMEOUT)),
       );
-    } catch (err) {
-      if (err instanceof TimeoutError) {
-        throw new ServiceUnavailableException(
-          'El servicio de usuarios no respondió a tiempo',
+    } catch (error) {
+      if (error instanceof TimeoutError) {
+        throw new UnauthorizedException(
+          'Timeout al contactar al microservicio',
         );
       }
-      throw new ServiceUnavailableException(
-        'No se pudo conectar con el servicio de usuarios',
-      );
+      throw new UnauthorizedException('Usuario no encontrado o error de red');
     }
 
-    // 2) Validaciones de negocio FUERA del try, para que no las atrape
-    if (reply.error) {
-      // aquí cae tu BadRequestException para email duplicado
-      throw new BadRequestException(reply.error);
-    }
-    if (!reply.data) {
-      throw new BadRequestException(
-        'Respuesta inválida del servicio de usuarios',
-      );
+    if (!user || !user.password) {
+      throw new UnauthorizedException('Usuario no existe');
     }
 
-    return reply.data;
+    const isPasswordValid = await bcryptjs.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Contraseña incorrecta');
+    }
+
+    const payload = { email: user.email, role: user.role };
+    const token = await this.jwtService.signAsync(payload);
+
+    return {
+      token,
+      email,
+    };
   }
 }

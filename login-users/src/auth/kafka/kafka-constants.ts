@@ -1,0 +1,4 @@
+export const KafkaServices = {
+  USER_LOGIN_SERVICE: 'USER_LOGIN_SERVICE',
+  USER_SEARCH_SERVICE: 'USER_SEARCH_SERVICE',
+};
