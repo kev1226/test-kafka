@@ -31,6 +31,11 @@ export class UsersKafkaController {
 
   @MessagePattern(KafkaTopics.GET_USER_BY_EMAIL_WITH_PASSWORD)
   async handleGetUserWithPassword(@Payload() email: string) {
-    return this.usersService.findByEmailWithPassword(email);
+    try {
+      const user = await this.usersService.findByEmailWithPassword(email);
+      return { data: user };
+    } catch {
+      return { error: 'Usuario no encontrado' };
+    }
   }
 }

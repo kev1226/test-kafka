@@ -1,27 +1,22 @@
-import {
-  Inject,
-  Injectable,
-  UnauthorizedException,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import * as bcryptjs from 'bcryptjs';
-import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
-import { KafkaServices } from './kafka/kafka-constants';
 import { ClientKafka } from '@nestjs/microservices';
-import { KafkaTopics } from './kafka/kafka-topics.enum';
-import { firstValueFrom, TimeoutError } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { timeout } from 'rxjs/operators';
+import { LoginDto } from './dto/login.dto';
+import { KafkaServices } from './kafka/kafka-constants';
+import { KafkaTopics } from './kafka/kafka-topics.enum';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
+  private readonly TIMEOUT = 5000;
+
   constructor(
     @Inject(KafkaServices.USER_LOGIN_SERVICE)
     private readonly kafkaClient: ClientKafka,
     private readonly jwtService: JwtService,
   ) {}
-
-  private readonly RPC_TIMEOUT = 5000;
 
   async onModuleInit() {
     this.kafkaClient.subscribeToResponseOf(
@@ -31,37 +26,20 @@ export class AuthService implements OnModuleInit {
   }
 
   async login({ email, password }: LoginDto) {
-    let user;
-    try {
-      user = await firstValueFrom(
-        this.kafkaClient
-          .send(KafkaTopics.GET_USER_BY_EMAIL_WITH_PASSWORD, email)
-          .pipe(timeout(this.RPC_TIMEOUT)),
-      );
-    } catch (error) {
-      if (error instanceof TimeoutError) {
-        throw new UnauthorizedException(
-          'Timeout al contactar al microservicio',
-        );
-      }
-      throw new UnauthorizedException('Usuario no encontrado o error de red');
-    }
+    const { data: user } = await firstValueFrom(
+      this.kafkaClient
+        .send<{ data: any }>(KafkaTopics.GET_USER_BY_EMAIL_WITH_PASSWORD, email)
+        .pipe(timeout(this.TIMEOUT)),
+    );
 
-    if (!user || !user.password) {
-      throw new UnauthorizedException('Usuario no existe');
-    }
+    const match = await bcryptjs.compare(password, user.password);
+    if (!match) return null;
 
-    const isPasswordValid = await bcryptjs.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Contraseña incorrecta');
-    }
+    const token = await this.jwtService.signAsync({
+      email: user.email,
+      role: user.role,
+    });
 
-    const payload = { email: user.email, role: user.role };
-    const token = await this.jwtService.signAsync(payload);
-
-    return {
-      token,
-      email,
-    };
+    return { token, email: user.email };
   }
 }
