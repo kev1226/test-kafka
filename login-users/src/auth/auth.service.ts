@@ -24,7 +24,9 @@ export class AuthService implements OnModuleInit {
   private readonly RPC_TIMEOUT = 5000;
 
   async onModuleInit() {
-    this.kafkaClient.subscribeToResponseOf(KafkaTopics.LOGIN_USER);
+    this.kafkaClient.subscribeToResponseOf(
+      KafkaTopics.GET_USER_BY_EMAIL_WITH_PASSWORD,
+    );
     await this.kafkaClient.connect();
   }
 
@@ -33,7 +35,7 @@ export class AuthService implements OnModuleInit {
     try {
       user = await firstValueFrom(
         this.kafkaClient
-          .send(KafkaTopics.LOGIN_USER, { email })
+          .send(KafkaTopics.GET_USER_BY_EMAIL_WITH_PASSWORD, { email })
           .pipe(timeout(this.RPC_TIMEOUT)),
       );
     } catch (error) {
