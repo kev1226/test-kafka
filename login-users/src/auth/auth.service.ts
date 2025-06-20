@@ -35,7 +35,7 @@ export class AuthService implements OnModuleInit {
     try {
       user = await firstValueFrom(
         this.kafkaClient
-          .send(KafkaTopics.GET_USER_BY_EMAIL_WITH_PASSWORD, { email })
+          .send(KafkaTopics.GET_USER_BY_EMAIL_WITH_PASSWORD, email)
           .pipe(timeout(this.RPC_TIMEOUT)),
       );
     } catch (error) {
