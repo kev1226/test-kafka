@@ -1,4 +1,4 @@
-import { Controller } from '@nestjs/common';
+import { Controller, NotFoundException } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { UsersService } from './users.service';
 import { KafkaTopics } from '../kafka/kafka-topics.enum';
@@ -34,6 +34,16 @@ export class UsersKafkaController {
     try {
       const user = await this.usersService.findByEmailWithPassword(email);
       return { data: user };
+    } catch {
+      return { error: 'Usuario no encontrado' };
+    }
+  }
+
+  @MessagePattern(KafkaTopics.PROFILE_USER)
+  async handleGetProfile(@Payload() payload: { email: string; role: string }) {
+    try {
+      const user = await this.usersService.findOneByEmail(payload.email);
+      return { data: { name: user.name, email: user.email } };
     } catch {
       return { error: 'Usuario no encontrado' };
     }
