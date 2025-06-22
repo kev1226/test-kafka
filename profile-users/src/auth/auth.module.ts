@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { ClientsModule } from '@nestjs/microservices';
 import { kafkaClientConfig } from 'src/kafka/kafka-client.config';
 import { JwtModule } from '@nestjs/jwt';
-import { jwtConstants } from 'src/common/constants/jwt.constants';
+import { jwtConstants } from 'src/auth/constants/jwt.constants';
 
 @Module({
   imports: [
