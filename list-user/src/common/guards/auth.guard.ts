@@ -5,6 +5,7 @@ import {
   Injectable,
   UnauthorizedException,
   ForbiddenException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
@@ -16,12 +17,17 @@ import { timeout } from 'rxjs/operators';
 import { ROLES_KEY } from '../decorators/auth.decorator';
 
 @Injectable()
-export class AuthGuard implements CanActivate {
+export class AuthGuard implements CanActivate, OnModuleInit {
   constructor(
     @Inject(KafkaServices.AUTH_VERIFIER_SERVICE)
     private readonly kafkaClient: ClientKafka,
     private readonly reflector: Reflector,
   ) {}
+
+  async onModuleInit() {
+    this.kafkaClient.subscribeToResponseOf(KafkaTopics.VERIFY_TOKEN);
+    await this.kafkaClient.connect();
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredRoles =
@@ -55,20 +61,10 @@ export class AuthGuard implements CanActivate {
     }
 
     if (!result?.isValid || !result.payload) {
-      throw new ForbiddenException(result?.error || 'Token inválido');
+      throw new ForbiddenException(result.error || 'Token inválido');
     }
 
-    const user = result.payload;
-
-    // Admin siempre accede
-    if (requiredRoles.length > 0 && !user.roles?.includes('admin')) {
-      const tienePermiso = requiredRoles.some((r) => user.roles?.includes(r));
-      if (!tienePermiso) {
-        throw new ForbiddenException('No tienes el rol necesario');
-      }
-    }
-
-    request['user'] = user;
+    request['user'] = result.payload;
     return true;
   }
 }

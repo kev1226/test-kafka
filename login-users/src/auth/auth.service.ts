@@ -73,7 +73,7 @@ export class AuthService implements OnModuleInit {
 
     const token = await this.jwtService.signAsync({
       email: user.email,
-      roles: user.role,
+      roles: [user.role],
     });
 
     return { token, email: user.email };

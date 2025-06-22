@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
 import { ClientsModule } from '@nestjs/microservices';
 import { kafkaClientConfig } from 'src/kafka/kafka-client.config';
+import { AuthGuard } from 'src/common/guards/auth.guard';
 
 @Module({
   imports: [
@@ -12,7 +13,7 @@ import { kafkaClientConfig } from 'src/kafka/kafka-client.config';
     TypeOrmModule.forFeature([User]),
   ],
   controllers: [UsersController],
-  providers: [UsersService],
+  providers: [UsersService, AuthGuard],
   exports: [UsersService], // Exporting UsersService to be used in other modules
 })
 export class UsersModule {}

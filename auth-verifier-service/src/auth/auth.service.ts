@@ -12,16 +12,21 @@ export class AuthService {
   validateToken(data: TokenValidationRequest): TokenValidationResponse {
     try {
       const token = data.token.replace('Bearer ', '');
-      const payload = jwt.verify(token, this.secret);
+      const decoded = jwt.verify(token, this.secret) as any;
+
+      const roles = Array.isArray(decoded.roles)
+        ? decoded.roles
+        : [decoded.roles];
 
       if (
         data.requiredRoles &&
-        !data.requiredRoles.some((role) => payload['roles']?.includes(role))
+        !roles.includes('admin') &&
+        !data.requiredRoles.some((r) => roles.includes(r))
       ) {
         return { isValid: false, error: 'Forbidden: role not allowed' };
       }
 
-      return { isValid: true, payload };
+      return { isValid: true, payload: { ...decoded, roles } };
     } catch (err) {
       return { isValid: false, error: err.message };
     }
