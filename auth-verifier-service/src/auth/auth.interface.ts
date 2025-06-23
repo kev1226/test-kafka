@@ -8,3 +8,8 @@ export interface TokenValidationResponse {
   payload?: any;
   error?: string;
 }
+
+export interface TokenValidationRequestWithOrigin
+  extends TokenValidationRequest {
+  origin?: string;
+}
